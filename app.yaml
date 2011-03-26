@@ -17,7 +17,7 @@ handlers:
   script: app.py
 - url: /
   script: app.py
-- url: /static/.*
+- url: /static/(.*)
   static_files: static/\1
   upload: static/(.*)
 - url: /crossdomain.xml
