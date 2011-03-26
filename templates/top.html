@@ -6,23 +6,42 @@
     <meta name="description" content="非公式 東京電力電力供給状況API" />
     <meta http-equiv="content-type" content="text/html;charset=utf-8"/>
     <link rel="stylesheet" href="static/main.css" type="text/css" media="all" />
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.1/jquery.min.js"></script>
+    <script type="text/javascript">
+	$(document).ready(function(){
+	  $.get("/latest.json", function(data) {
+	    if ( data !== undefined && typeof(data) == "object") {
+	      $(".result_year").text(data.year);	
+	      $(".result_month").text(data.month);
+	      $(".result_day").text(data.day);
+	      $(".result_hour").text(data.hour);
+	      $(".result_hourend").text(data.hour + 1);
+	      $(".result_usage").text(data.usage);
+	      $(".result_ratio").text(Math.floor((data.usage * 100 / data.capacity) * 10) / 10);
+	      $(".result_capacity").text(data.capacity);
+	      $(".result_saving").text(data.saving === true ? "実施中" : "実施無し");
+	    }
+	  });
+	});
+    </script>
   </head>
   <body>
     <h1>東京電力電力供給状況API</h1>
 
     <iframe src="http://www.facebook.com/plugins/like.php?href=http%3A%2F%2Ftepco-usage-api.appspot.com%2F&amp;layout=standard&amp;show_faces=false&amp;width=450&amp;action=like&amp;font&amp;colorscheme=light&amp;height=35" scrolling="no" frameborder="0" style="border:none; overflow:hidden; width:450px; height:35px;" allowTransparency="true"></iframe>
 
-    {% if usage %}
+    <div id="result">
       <h2>最新状況</h2>
       <p>
-	時刻：{{ usage.year }}/{{ usage.month }}/{{ usage.day }} {{ usage.hour }}時台（{{ usage.hour }}時～{{ usage.hour + 1 }}時）<br/>
-	計画停電：{{ "実施中" if usage.saving else "実施無し" }}<br/>
-	使用率：{{ ratio }}%<br/>
-	消費電力：{{ usage.usage }}万kW<br/>
-	供給可能最大電力：{{ usage.capacity }}万kW
+	時刻：<span class="result_year">-</span>/<span class="result_month">-</span>/<span class="result_day">-</span> 
+	         <span class="result_hour">-</span>時台（<span class="result_hour">-</span>時～<span class="result_hourend">-</span>時）<br/>
+	計画停電： <span class="result_saving">-</span><br/>
+	使用率：<span class="result_ratio">-</span>%<br/>
+	消費電力：<span class="result_usage">-</span>万kW<br/>
+	供給可能最大電力：<span class="result_capacity">-</span>万kW
       </p>
-    {% endif %}
- 
+    </div>
+
     {{ contents }}
   </body>
 </html>
