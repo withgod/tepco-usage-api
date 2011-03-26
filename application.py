@@ -11,8 +11,11 @@ from flask import (
 app = Flask(__name__)
 app.debug = True
 
+from google.appengine.api import memcache
 from google.appengine.ext import db
+
 import datetime
+import logging
 import re
 import markdown
 import tepco
@@ -30,6 +33,7 @@ class Usage(db.Model):
   usage_updated = db.DateTimeProperty(required=True)
   capacity = db.IntegerProperty(required=True)
   capacity_updated = db.DateTimeProperty(required=True)
+  capacity_peak_period = db.IntegerProperty()
 
 class Config(db.Model):
   # key_name
@@ -72,6 +76,7 @@ def update_from_tepco():
   usage_updated = data['usage-updated']
   capacity = data['capacity']
   capacity_updated = data['capacity-updated']
+  capacity_peak_period = data['capacity-peak-period']
 
   # the image is updated hourly just after the hour.
   jst = jst_from_utc(usage_updated) - datetime.timedelta(hours=1)
@@ -97,8 +102,10 @@ def update_from_tepco():
 	usage_updated=usage_updated,
 	capacity=capacity,
 	capacity_updated=capacity_updated,
+	capacity_peak_period=capacity_peak_period,
       )
     entry.put()
+  memcache.delete('latest.json')
   return ''
 
 RE_TWITTER_ID = re.compile(r'@([a-zA-Z0-9_]+)')
@@ -137,19 +144,28 @@ def dict_from_usage(usage):
     'usage_updated': str(usage.usage_updated),
     'capacity': usage.capacity,
     'capacity_updated': str(usage.capacity_updated),
+    'capacity_peak_period': usage.capacity_peak_period,
   }
 
 RE_CALLBACK = re.compile(r'^[a-zA-Z0-9_.]+$')
 
-def resultHandler(data):
-  if not data:
-    abort(404)
-
+def resultHandler(result, cachekey=None):
   callback = request.form.get('callback') or request.args.get('callback')
   if callback and not RE_CALLBACK.search(callback):
     abort(404)
 
-  data = json.dumps(data, indent=2)
+  if cachekey:
+    data = memcache.get(cachekey)
+    if not data or not isinstance(data, str):
+      logging.info('Cache miss, compute tye result.')
+      data = result()
+      if not data:
+	abort(404)
+      data = json.dumps(data, indent=2)
+      memcache.set(cachekey, data)
+  else:
+    data = json.dumps(result, indent=2)
+
   if callback:
     return Response('%s(%s);' % (callback, data), mimetype='text/javascript')
   else:
@@ -157,8 +173,10 @@ def resultHandler(data):
 
 @app.route('/latest.json')
 def latest():
-  usage = Usage.all().order('-entryfor').get()
-  return resultHandler(dict_from_usage(usage))
+  def compute():
+    usage = Usage.all().order('-entryfor').get()
+    return dict_from_usage(usage)
+  return resultHandler(compute, 'latest.json')
 
 @app.route('/<int:year>/<int:month>/<int:day>/<int:hour>.json')
 def hour(year, month, day, hour):
@@ -168,7 +186,8 @@ def hour(year, month, day, hour):
   usage = usage.filter('day =', day)
   usage = usage.filter('hour =', hour)
   usage = usage.get()
-  return resultHandler(dict_from_usage(usage))
+  usage = dict_from_usage(usage)
+  return resultHandler(usage)
 
 @app.route('/<int:year>/<int:month>/<int:day>.json')
 def day(year, month, day):
@@ -188,4 +207,3 @@ def month(year, month):
   usage = usage.order('entryfor')
   usage = [dict_from_usage(u) for u in usage]
   return resultHandler(usage)
-
